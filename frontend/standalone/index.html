@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>离散制造车间生产管理系统（免构建演示版）</title>
+    <link rel="stylesheet" href="./style.css" />
+
+    <!-- 第三方库全部本地化到 vendor/，不访问任何外部 CDN，满足私有化部署要求 -->
+    <script src="./vendor/echarts.min.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "vue": "./vendor/vue.esm-browser.prod.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "discrete-manufacturing-mes-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "离散制造车间生产管理系统（MES 方向）前端 · Vue3 + ECharts",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5173"
+  },
+  "dependencies": {
+    "echarts": "^5.5.1",
+    "pinia": "^2.2.6",
+    "vue": "^3.5.13",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^5.4.11"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
