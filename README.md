@@ -1,10 +1,8 @@
 # 离散制造车间生产管理系统（MES 方向）
 
-> 面向离散制造场景的车间生产管理系统，覆盖
-> **生产工单 → 工序报工 → 设备数采 → 质量检验（SPC）→ 库存联动 → 统计报表 → 权限控制**
-> 完整业务闭环。
->
-> 技术栈：**Python · FastAPI · MySQL · Redis · Vue3 · ECharts · Docker Compose**
+我一个人写的 MES，场景是离散制造车间。工单派下去、工人报工、设备状态自动采、质量数据超出控制限自动开质检单、报工同时把料扣掉——这条链路是完整跑通的，不是画在纸上的。
+
+技术栈：Python · FastAPI · MySQL · Redis · Vue3 · ECharts · Docker Compose
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688)](https://fastapi.tiangolo.com/)
@@ -17,41 +15,38 @@
 
 * [一、项目背景](#一项目背景)
 * [二、功能清单](#二功能清单)
-* [三、简历描述 × 已实现功能 逐条对照](#三简历描述--已实现功能-逐条对照)
-* [四、技术架构与实现方案](#四技术架构与实现方案)
-* [五、目录结构](#五目录结构)
-* [六、快速开始](#六快速开始)
-* [七、测试](#七测试)
-* [八、接口文档](#八接口文档)
-* [九、演示数据](#九演示数据)
-* [十、文档索引](#十文档索引)
+* [三、技术架构与实现方案](#三技术架构与实现方案)
+* [四、目录结构](#四目录结构)
+* [五、快速开始](#五快速开始)
+* [六、测试](#六测试)
+* [七、接口文档](#七接口文档)
+* [八、演示数据](#八演示数据)
+* [九、文档索引](#九文档索引)
 
 ---
 
 ## 一、项目背景
 
-离散制造（多品种、小批量、工艺路线多变）的车间现场，普遍存在三类痛点：
+写这个项目的起因很实际：我想弄明白车间里的账为什么总对不上。
 
-1. **工单状态靠人工维护**：口头下达、纸质流转，状态不一致导致排产失真；
-   重复报工更是直接产生脏数据，计划量与完成量对不上。
-2. **设备状态黑盒**：设备是否在运行、稼动率多少，只能事后统计，
-   管理者看到的永远是"昨天的数据"。
-3. **质量靠事后全检**：缺少过程控制手段，异常发现往往滞后一整批。
+离散制造（多品种、小批量、工艺路线三天两头改）的现场基本是这样——工单靠口头下达、纸质流转，谁改了状态说不清；同一个工人报完工，网络卡了一下又点一次提交，工单数量就翻倍，库存跟着多扣一次。这种脏数据事后极难修，所以我从一开始就把工单状态机和报工幂等当成重点，而不是先堆功能。
 
-本项目按 MES（Manufacturing Execution System）的标准分层，
-用**工单状态机 + 事务与幂等**解决数据准确性，
-用**设备数采 + Redis 缓存 + SSE 推送**解决实时性，
-用 **SPC X̄-R 控制图 + 自动判异**解决质量前置预警，
-并用 **RBAC 接口级权限**保证三类角色各司其职。
+设备那边更像黑盒。机器到底在不在跑、稼动率多少，只能事后统计，管理者看到的永远是昨天的数据。数采网关 + Redis + SSE 这一套就是为了让看板变成实时的，不用等人去刷新页面。
+
+质量这块，不少厂子还是靠事后全检，一批做完了才发现问题。SPC 的思路是把控制限画出来，超了立刻报警——这也是我在这个项目里第一次真正接触 SPC，X̄-R 图和那 8 条判异准则是照着 GB/T 4091 一条条实现的，不是调库。
+
+按 MES（Manufacturing Execution System）的常规分层，我把系统拆成 API / Service / Data 三层，业务规则、事务边界、状态机校验统一收在 Service 层，路由层只管参数校验和响应包装。
 
 ---
 
 ## 二、功能清单
 
+下面是目前实际能跑的功能：
+
 | 模块 | 功能点 |
 | --- | --- |
 | 生产工单 | 工单创建（按 BOM 展开物料需求）、状态机流转、工序报工、超量拦截、末工序自动完工 |
-| 幂等与事务 | 应用层幂等快照 + 数据库唯一约束**双层防护**，杜绝重复报工 |
+| 幂等与事务 | 应用层幂等快照 + 数据库唯一约束双层防护，杜绝重复报工 |
 | 设备数采 | 模拟网关定时上报运行数据、Redis 缓存实时状态、SSE 秒级推送看板 |
 | 质量管理 | SPC X̄-R 控制图（8 条判异准则）、控制限自动重算、异常批次自动生成待处理质检单 |
 | 库存管理 | 发料 / 退料 / 盘点、报工自动扣减、库存不足整笔回滚、安全库存预警 |
@@ -61,48 +56,11 @@
 
 ---
 
-## 三、简历描述 × 已实现功能 逐条对照
+## 三、技术架构与实现方案
 
-> 每条均给出**代码位置**，可逐项核对，不做夸大。
+### 3.1 分层架构
 
-| # | 简历描述 | 实现情况 | 代码位置 |
-| --- | --- | --- | --- |
-| 1 | 技术栈 Python · FastAPI · MySQL · Redis · Vue3 · ECharts · Docker Compose | 全部真实使用：后端 FastAPI + SQLAlchemy（MySQL 8，可切 SQLite）；Redis 缓存设备实时状态；前端 Vue3 + Vite + ECharts；`docker-compose.yml` 编排 MySQL 8 + Redis 7 + API | `backend/app/`、`frontend/`、`docker-compose.yml` |
-| 2 | FastAPI **三层架构**（路由 / 服务 / 数据访问） | `api/` 只做参数校验与响应包装；`services/` 承载全部业务规则；`repositories/` + `models/` 负责数据访问。层间禁止反向依赖 | `backend/app/api/`、`app/services/`、`app/repositories/` |
-| 3 | 使用 **SQLAlchemy + MySQL**，设计 **20+ 张业务表** | 实际 **31 张表**（权限 5 + 主数据 12 + 库存 3 + 工单 4 + 质量 4 + 设备 2 + 系统 1），文档由元数据自动生成 | `backend/app/models/`、`docs/数据库设计.md` |
-| 4 | **工单状态机流转** | 状态流转表是唯一真源；非法流转抛 `StateConflictError`；前端按钮由后端返回的可流转状态驱动 | `app/models/order.py::WORK_ORDER_TRANSITIONS`、`app/services/order_service.py` |
-| 5 | 状态流转加**事务与幂等控制**，防止重复报工产生脏数据 | 一次报工 = 一个事务（报工流水 + 库存扣减 + SPC 子组 + 质检单 + 工单完工），任一失败整笔回滚；幂等为**双层**：① 应用层 `sys_idempotency` 请求指纹 + 响应快照；② `pp_work_report` 唯一约束 `uk_pp_report_idempotency` | `app/core/idempotency.py`、`app/db/unit_of_work.py`、`app/services/order_service.py::report_work` |
-| 6 | 模拟**设备数采网关**定时上报运行数据 | 后台任务每 3 秒（`GATEWAY_INTERVAL_SEC`）采集一次全量设备帧并落 `eq_status_log`，固定随机种子可复现 | `app/realtime/device_gateway.py` |
-| 7 | **Redis 缓存设备实时状态** | 设备快照写入 Redis（TTL 600s），看板接口优先读缓存，避免全表扫描；Redis 不可用时自动降级为进程内内存实现，接口语义一致 | `app/realtime/redis_client.py` |
-| 8 | **SSE** 向前端推送，车间看板**秒级刷新** | `EventSource` 长连接，每 2 秒（`SSE_PUSH_INTERVAL_SEC`）推送一帧，15 秒心跳；Nginx 配置对该路径关闭 `proxy_buffering` | `app/realtime/sse_hub.py`、`app/api/v1/dashboard.py::stream`、`deploy/nginx.conf` |
-| 9 | 按 **SPC** 思路实现**均值-极差控制图（X̄-R 图）**计算与超限告警 | 纯函数实现：A₂/D₃/D₄/d₂ 系数表（n=2~10）；X̄ 图 `UCL/LCL = X̄̄ ± A₂·R̄`；R 图 `D₄·R̄ / D₃·R̄`；`σ̂ = R̄/d₂`；`Cp / Cpk` | `app/services/spc_core.py` |
-| 10 | **ECharts 可视化** | X̄ 图与 R 图叠加 CL/UCL/LCL `markLine`，超限点红色高亮，判异清单联动 | `frontend/src/views/SpcView.vue`、`frontend/standalone/views.js` |
-| 11 | 异常批次**自动生成待处理质检单** | 报工或录入子组时命中判异 → 在同一事务内生成 `PENDING` 质检单 | `app/services/spc_service.py::record_subgroup` |
-| 12 | **GB/T 4091 判异准则** | 完整实现 8 条（默认启用 1/2/3/5/6，可配置 `SPC_RULE_SET`） | `app/services/spc_core.py::detect_violations` |
-| 13 | **多表关联 SQL** 实现 8 张统计报表 | 工单进度、良品率、设备稼动率、产量日报、工序工时效率、不良柏拉图、库存周转、人员绩效，均为 SQL 聚合而非内存拼接 | `app/services/report_service.py` |
-| 14 | 基于 **RBAC** 实现**接口级权限控制**（管理员 / 班组长 / 操作工） | 21 个权限点 → 3 个角色 → FastAPI 依赖 `require_permissions(...)` 挂在具体路由上；令牌解析后**回源复核**用户状态 | `app/core/rbac.py`、`app/core/permission_catalog.py` |
-| 15 | **40+ 个单元测试**覆盖工单流转、库存扣减等关键路径 | 实际 **82 个** pytest 用例，全部通过；覆盖状态机、幂等、报工、库存、SPC、RBAC、网关/SSE、API 契约 | `backend/tests/`（9 个文件） |
-| 16 | **Docker Compose 一键部署** | `docker compose up -d --build` 起 MySQL 8 + Redis 7 + API(+前端)，seeder 服务自动写示例数据；另附单容器 SQLite 轻量版 | `docker-compose.yml`、`docker-compose.lite.yml`、`backend/Dockerfile` |
-| 17 | 接口文档由 **Swagger 自动生成**并手写补充示例 | FastAPI 自动生成 OpenAPI 3.1（`/docs`、`/redoc`）；另手写统一约定、业务语义、错误码、手搓 curl 示例 | `docs/接口文档.md` |
-
-### 量化指标核对
-
-| 指标 | 简历口径 | 本仓库实测 | 核对命令 |
-| --- | --- | --- | --- |
-| 业务表数量 | 20+ 张 | **31 张** | `python -m scripts.gen_table_doc` |
-| 单元测试 | 40+ 个 | **82 个** | `bash scripts/test.sh` |
-| 统计报表 | 8 张 | **8 张** | `GET /api/v1/reports` |
-| 权限点 / 角色 | — / 3 类 | **21 / 3** | `app/core/permission_catalog.py` |
-| 判异准则 | — | **8 条**（GB/T 4091） | `GET /api/v1/quality/spc/rules` |
-| 看板刷新 | 秒级 | **2 秒/帧** | `SSE_PUSH_INTERVAL_SEC=2` |
-| 后端代码量 | — | 约 9,100 行 Python | `find backend -name "*.py" \| xargs wc -l` |
-| 前端代码量 | — | 约 4,000 行（Vue/JS/CSS） | — |
-
----
-
-## 四、技术架构与实现方案
-
-### 4.1 分层架构
+大概是这样：
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -121,41 +79,33 @@
        模拟设备数采网关 app/realtime/device_gateway.py
 ```
 
-### 4.2 关键设计决策
+前端走 REST 拿业务数据，设备推送单独走一条 SSE 长连接。网关每 3 秒上报一帧，先写进 Redis，再由 SSE 广播出去。
 
-**① 双层幂等（为什么不用单层？）**
+### 3.2 几个设计上纠结过的点
 
-只靠应用层快照：并发请求可能同时通过检查，双双落库。
-只靠唯一约束：能挡住重复，但无法"回放首次结果"，调用方拿不到幂等响应。
-因此设计为：先查 `sys_idempotency`（命中 `SUCCEEDED` 直接回放快照、命中
-`IN_PROGRESS` 返回 409），未命中则执行业务并依赖
-`uk_pp_report_idempotency` 唯一约束兜底。**两层互为保险**。
+**幂等为什么做了两层。**
 
-**② 状态机单一真源**
+只靠应用层快照，两个并发请求可能同时通过检查然后双双落库，唯一约束没加就漏了。反过来只靠唯一约束，重复写入是挡住了，但调用方第二次拿不到"首次执行的结果"，只能收到一个报错，前端体验很差。
 
-流转表 `WORK_ORDER_TRANSITIONS` 定义在模型层，服务层校验与
-`GET /orders/{id}/allowed-transitions` 接口读取的是同一份数据，
-前端按钮因此永远不会出现"能点但会被拒"的情况。
+最后的做法：先查 `sys_idempotency`，命中 `SUCCEEDED` 就直接把上次的响应快照回放回去，命中 `IN_PROGRESS` 返回 409 提示正在处理；没命中才真正跑业务，同时靠 `pp_work_report` 上的 `uk_pp_report_idempotency` 唯一约束兜底。两层互为保险。
 
-**③ 库存扣减的行级锁**
+**状态机只留一份定义。**
 
-`locking.py` 对 `mm_inventory_stock` 目标行加行锁后再判断可用量，
-避免在并发发料下出现超发；不足则抛 `InventoryShortageError` 让整笔事务回滚，
-绝不允许出现负库存。
+流转表 `WORK_ORDER_TRANSITIONS` 放在模型层。服务层校验读它，`GET /orders/{id}/allowed-transitions` 也读它，前端按钮按这个接口渲染，所以不会出现"按钮能点、后端拒绝"的错位。这里的关键是别在前端再自己维护一份状态列表，不然两边很快就会不同步。
 
-**④ Redis 自动降级**
+**库存扣减加了行锁。**
 
-`RedisCache` 在连接失败时把 `_redis` 置空并切换到 `_MemoryBackend`
-（带过期时间的进程内 KV + pub/sub）。上层代码完全无感，
-保证"没有 Redis 也能完整演示"——这也是本仓库能在任何机器上跑起来的原因。
+`locking.py` 先对 `mm_inventory_stock` 的目标行加锁再判断可用量，避免并发发料超发；不够就抛 `InventoryShortageError` 让整笔事务回滚，不允许出现负库存。
 
-**⑤ SPC 算法纯函数化**
+**Redis 连不上就降级。**
 
-`spc_core.py` 不依赖数据库、不依赖框架，输入样本输出控制限与判异结果。
-好处是可单测（15 个用例只测算法）、可离线试算（`/spc/analyze` 不落库）、
-可复用到任何工序。
+`RedisCache` 建连失败时把 `_redis` 置空，切到 `_MemoryBackend`（带过期时间的进程内 KV + pub/sub）。上层代码完全无感，接口语义和用 Redis 时一致。这么做的原因是我想让这个仓库在没有 MySQL、没有 Redis 的机器上也能一键跑起来演示，而不是先教人装环境。
 
-### 4.3 工单状态机
+**SPC 算法写成纯函数。**
+
+`spc_core.py` 不碰数据库也不碰框架，输入样本、输出控制限和判异结果。带来的好处很直接：能单独写单测（15 个用例只测算法本身）、能离线试算（`/spc/analyze` 不落库）、换任何工序都能复用。
+
+### 3.3 工单状态机
 
 ```
 DRAFT ──下达──> RELEASED ──开工──> IN_PROGRESS ──完工──> COMPLETED
@@ -165,7 +115,9 @@ DRAFT ──下达──> RELEASED ──开工──> IN_PROGRESS ──完工�
 IN_PROGRESS ──暂停──> PAUSED ──恢复──> IN_PROGRESS
 ```
 
-### 4.4 一次报工的事务边界
+### 3.4 一次报工的事务边界
+
+报工是最容易出问题的一步，所以整条流程压在一个事务里：
 
 ```
 [BEGIN]
@@ -181,7 +133,9 @@ IN_PROGRESS ──暂停──> PAUSED ──恢复──> IN_PROGRESS
 
 ---
 
-## 五、目录结构
+## 四、目录结构
+
+目录大概长这样：
 
 ```
 离散制造车间生产管理系统/
@@ -239,12 +193,12 @@ IN_PROGRESS ──暂停──> PAUSED ──恢复──> IN_PROGRESS
 
 ---
 
-## 六、快速开始
+## 五、快速开始
 
-### 方式一：Docker Compose（推荐，一键）
+最省事的还是 Docker Compose，一条命令起全套：
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/wwweega/discrete-manufacturing-mes.git
 cd discrete-manufacturing-mes
 
 bash scripts/docker-up.sh          # Windows: scripts\docker-up.bat
@@ -253,13 +207,13 @@ bash scripts/docker-up.sh          # Windows: scripts\docker-up.bat
 # 打开 http://localhost:8000/  ，账号 admin / leader / worker，口令 mes@2026
 ```
 
-### 方式二：轻量单容器（无需 MySQL / Redis）
+只有一台机器、不想装 MySQL 和 Redis，就用轻量版，单容器 + SQLite：
 
 ```bash
 bash scripts/docker-up.sh lite     # Windows: scripts\docker-up.bat lite
 ```
 
-### 方式三：本地直跑（开发调试）
+本地开发我一般直接跑，改代码热重载：
 
 ```bash
 bash scripts/start.sh              # Windows: scripts\start.bat    启动 API（默认 SQLite）
@@ -267,18 +221,17 @@ bash scripts/seed.sh               # Windows: scripts\seed.bat     写入示例�
 # 打开 http://localhost:8000/
 ```
 
-前端开发模式（热更新，需 Node 18+）：
+前端要热更新就另开一个终端（需 Node 18+）：
 
 ```bash
 cd frontend && npm install && npm run dev     # http://localhost:5173，已代理 /api → 8000
 ```
 
-> **免构建前端**：若不想装 Node，设置 `FRONTEND_PREFER=standalone`，
-> 后端会直接提供 `frontend/standalone/` 版本（功能一致，仅样式略简）。
+不想装 Node 也行，设 `FRONTEND_PREFER=standalone`，后端会直接提供 `frontend/standalone/` 那份免构建版本，功能一样，样式简单点。
 
 ---
 
-## 七、测试
+## 六、测试
 
 ```bash
 bash scripts/test.sh                          # 全部 82 个用例
@@ -286,7 +239,7 @@ bash scripts/test.sh -k idempotency           # 只跑幂等相关
 bash scripts/test.sh tests/test_spc_core.py   # 只跑 SPC 算法
 ```
 
-测试使用**临时 SQLite** 文件，每个用例独立建库，不污染本地数据，也不需要外部服务。
+测试跑在临时 SQLite 文件上，每个用例独立建库，不污染本地数据，也不需要起 MySQL / Redis。
 
 | 测试文件 | 覆盖内容 |
 | --- | --- |
@@ -302,21 +255,21 @@ bash scripts/test.sh tests/test_spc_core.py   # 只跑 SPC 算法
 
 ---
 
-## 八、接口文档
+## 七、接口文档
 
-启动后自动可用：
+服务起来之后自动就有：
 
 * Swagger UI：<http://localhost:8000/docs>
 * ReDoc：<http://localhost:8000/redoc>
 * OpenAPI：<http://localhost:8000/openapi.json>
 
-手写补充（统一约定、业务语义、错误码、手搓示例）：[`docs/接口文档.md`](./docs/接口文档.md)
+自动生成的只到字段和参数级别，业务语义、错误码、手搓的 curl 示例我另写了一份：[`docs/接口文档.md`](./docs/接口文档.md)
 
-共 **36 个接口**：认证 2、工单 7、质量 8、看板 9、库存 5、报表 2、基础数据 2、健康检查 1（含）。
+一共 36 个接口：认证 2、工单 7、质量 8、看板 9、库存 5、报表 2、基础数据 2，加上健康检查。
 
 ---
 
-## 九、演示数据
+## 八、演示数据
 
 ```bash
 bash scripts/seed.sh           # 幂等播种
@@ -324,15 +277,15 @@ bash scripts/seed.sh --reset   # 删库重建后全量播种
 bash scripts/seed.sh --gateway 30   # 额外采集 30 帧设备数据
 ```
 
-播种内容（随机种子固定为 `20260301`，**结果可复现**）：
+随机种子固定在 `20260301`，所以每次播种出来的数据是一样的，截图和演示结果能对上：
 
 * 主数据：车间、产线、设备、员工、班次、产品、BOM、工艺路线、物料、仓库、供应商；
-* 业务数据：近 30 天的 **18 张工单**、**124 条报工记录**、**156 个 SPC 子组**、**6 张质检单**；
+* 业务数据：近 30 天的 18 张工单、124 条报工记录、156 个 SPC 子组、6 张质检单；
 * 3 个演示账号：`admin` / `leader` / `worker`（口令 `mes@2026`）。
 
 ---
 
-## 十、文档索引
+## 九、文档索引
 
 | 文档 | 内容 |
 | --- | --- |
