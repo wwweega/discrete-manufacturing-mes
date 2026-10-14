@@ -1,0 +1,13 @@
+# 统一换行符为 LF：保证 shell 脚本在 Linux 容器内可执行
+* text=auto eol=lf
+
+# Windows 批处理脚本必须保留 CRLF
+*.bat text eol=crlf
+
+# 二进制文件不做任何转换
+*.png binary
+*.jpg binary
+*.ico binary
+*.db binary
+*.tgz binary
+*.min.js linguist-vendored

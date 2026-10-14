@@ -1,0 +1,28 @@
+# 本地虚拟环境与依赖
+.venv/
+venv/
+**/node_modules/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# 本地数据库与运行时数据
+data/
+*.db
+*.sqlite3
+
+# 版本控制 / IDE / 系统文件
+.git/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 文档（不参与镜像构建）
+docs/
+*.md
+!README.md
+
+# 前端源码（镜像内为构建产物）
+frontend/src/

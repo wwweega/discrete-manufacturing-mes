@@ -1,0 +1,61 @@
+# ============================ Python ============================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist-info/
+*.egg-info/
+.eggs/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+ENV/
+
+# 测试与覆盖率
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+
+# ============================ Node ============================
+node_modules/
+.npm/
+.npmrc
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.vite/
+# Vite 构建产物不入库；仓库内保留 frontend/standalone 免构建版，
+# 克隆后无需 npm 即可直接演示（后端会自动回退挂载 standalone）
+frontend/dist/
+
+# ============================ 本地数据与配置 ============================
+data/
+*.db
+*.sqlite3
+*.sql-journal
+.env
+.env.local
+*.log
+
+# ============================ IDE / 编辑器 ============================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ============================ 操作系统 ============================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================ 工作区临时目录 ============================
+.workbuddy/
+.tmp-vend/
+.tmp*/
