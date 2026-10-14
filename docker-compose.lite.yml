@@ -1,0 +1,40 @@
+# =============================================================================
+# 轻量模式：只跑一个容器，无需 MySQL / Redis
+#
+#   docker compose -f docker-compose.lite.yml up -d --build
+#   docker compose -f docker-compose.lite.yml exec api python -m scripts.seed
+#
+# 说明：
+#   * 数据库使用容器内 SQLite 文件（/app/data/mes.db），通过 api_data 卷持久化；
+#   * Redis 不可用时，设备实时状态与幂等缓存自动降级为**进程内内存实现**，
+#     接口语义与 MySQL/Redis 模式完全一致（见 backend/app/realtime/redis_client.py）；
+#   * SSE 秒级推送、SPC 判异、工单幂等、8 张报表等功能全部可用。
+# =============================================================================
+
+name: discrete-manufacturing-mes-lite
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: mes-api-lite
+    environment:
+      APP_ENV: lite
+      DEBUG: "false"
+      DB_ENGINE: sqlite
+      SQLITE_PATH: /app/data/mes.db
+      REDIS_ENABLED: "false"    # 关闭 Redis → 自动使用进程内内存缓存
+      GATEWAY_ENABLED: "true"
+      GATEWAY_INTERVAL_SEC: "3"
+      SSE_PUSH_INTERVAL_SEC: "2"
+      FRONTEND_PREFER: dist
+      TZ: Asia/Shanghai
+    ports:
+      - "8000:8000"
+    volumes:
+      - api_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  api_data:

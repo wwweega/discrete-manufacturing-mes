@@ -1,0 +1,140 @@
+# =============================================================================
+# 离散制造车间生产管理系统 —— 一键部署编排
+#
+#   docker compose up -d --build     # 构建并启动（首次约 3~5 分钟）
+#   docker compose ps                # 查看服务状态
+#   docker compose logs -f api       # 跟踪后端日志
+#   docker compose down              # 停止
+#   docker compose down -v           # 停止并清空数据库卷
+#
+# 启动完成后访问：
+#   前端界面   http://localhost:8000/
+#   Swagger    http://localhost:8000/docs
+#   ReDoc      http://localhost:8000/redoc
+#   健康检查   http://localhost:8000/api/health
+#
+# 演示账号：admin / leader / worker，口令均为 mes@2026
+#
+# 可选：反向代理（nginx 80 端口）
+#   docker compose --profile nginx up -d --build
+# =============================================================================
+
+name: discrete-manufacturing-mes
+
+# 后端服务的公共配置（YAML 锚点，避免重复）
+x-backend-build: &backend-build
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+
+x-backend-env: &backend-env
+  APP_NAME: 离散制造车间生产管理系统
+  APP_ENV: prod
+  DEBUG: "false"
+  DB_ENGINE: mysql
+  MYSQL_HOST: db
+  MYSQL_PORT: 3306
+  MYSQL_USER: root
+  MYSQL_PASSWORD: mes123456
+  MYSQL_DB: mes
+  REDIS_HOST: cache
+  REDIS_PORT: 6379
+  GATEWAY_ENABLED: "true"
+  GATEWAY_INTERVAL_SEC: "3"
+  SSE_PUSH_INTERVAL_SEC: "2"
+  FRONTEND_PREFER: dist
+
+services:
+  # ---------------------------- MySQL 8 ----------------------------
+  db:
+    image: mysql:8.0
+    container_name: mes-db
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+      - --max_connections=500
+    environment:
+      MYSQL_ROOT_PASSWORD: mes123456
+      MYSQL_DATABASE: mes
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./deploy/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 20
+    restart: unless-stopped
+
+  # ---------------------------- Redis 7 ----------------------------
+  cache:
+    image: redis:7-alpine
+    container_name: mes-cache
+    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "6379:6379"
+    volumes:
+      - cache_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+  # ---------------------------- 后端 + 前端 ----------------------------
+  api:
+    <<: *backend-build
+    container_name: mes-api
+    environment:
+      <<: *backend-env
+    ports:
+      - "8000:8000"
+    volumes:
+      - api_data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------- 示例数据播种（一次性） ----------------------------
+  # 建表 + 写入主数据与近 30 天演示业务数据，执行完即退出（restart: "no"）。
+  seeder:
+    <<: *backend-build
+    container_name: mes-seeder
+    environment:
+      <<: *backend-env
+    command: ["python", "-m", "scripts.seed"]
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    restart: "no"
+
+  # ---------------------------- 可选：Nginx 反向代理 ----------------------------
+  web:
+    image: nginx:1.27-alpine
+    container_name: mes-web
+    profiles: ["nginx"]
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  cache_data:
+  api_data:
