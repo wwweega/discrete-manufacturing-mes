@@ -9,6 +9,10 @@
 [![Vue](https://img.shields.io/badge/Vue-3.5-42b883)](https://vuejs.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue)](./LICENSE)
 
+![车间看板：设备数采 + SSE 秒级刷新](docs/images/dashboard.png)
+
+![SPC X̄-R 控制图：超限自动判异并生成质检单](docs/images/spc.png)
+
 ---
 
 ## 目录
